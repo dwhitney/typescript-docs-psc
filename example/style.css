@@ -1,0 +1,66 @@
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 300;
+  src: local('Roboto Light'), local('Roboto-Light'), url(http://fonts.gstatic.com/s/roboto/v15/Hgo13k-tfSpn0qi1SFdUfZBw1xU1rKptJj_0jans920.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Roboto'), local('Roboto-Regular'), url(http://fonts.gstatic.com/s/roboto/v15/oMMgfZMQthOryQo9n22dcuvvDin1pK8aKteLpeZ5c0A.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Ubuntu Mono';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Ubuntu Mono'), local('UbuntuMono-Regular'), url(http://themes.googleusercontent.com/static/fonts/ubuntumono/v3/ViZhet7Ak-LRXZMXzuAfkbrIa-7acMAeDBVuclsi6Gc.woff) format('woff');
+}
+
+@font-face {
+  font-family: 'Ubuntu Mono';
+  font-style: normal;
+  font-weight: 700;
+  src: local('Ubuntu Mono Bold'), local('UbuntuMono-Bold'), url(http://themes.googleusercontent.com/static/fonts/ubuntumono/v3/ceqTZGKHipo8pJj4molythbnBKKEOwRKgsHDreGcocg.woff) format('woff');
+}
+
+body {
+
+    width: 800px;
+    margin: 0 auto;
+    font-family: 'Roboto', sans-serif;
+    color: #404040;
+    font-weight: 300;
+}
+
+h1, h2, h3, h4, h5, h6 {
+
+    text-decoration: underline;
+}
+
+.keyword {
+
+    font-weight: 400;
+}
+
+.syntax {
+    
+    color: gray;
+}
+
+.identifier {
+
+    color: #000060;
+}
+
+.literal {
+    
+    color: green;
+}
+
+.mono {
+    
+    font-family: 'Ubuntu Mono', monospace;
+}
