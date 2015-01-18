@@ -95,7 +95,7 @@ type PosToken =
 foreign import parseString
   "function parseString(s) {\
   \  return JSON.parse(s);\
-  \}" :: String -> String
+  \}" :: forall a. String -> a
   
 lex :: String -> Either Error [PosToken]
 lex s = runPure (catchException (return <<< Left) (Right <<< removeComments <$> runSTArray (do
@@ -133,9 +133,9 @@ lex s = runPure (catchException (return <<< Left) (Right <<< removeComments <$> 
                  Just "/" -> readLineComment (i + 2)
                  Just "*" -> readBlockComment (i + 2) l c
                  _        -> throwException $ error $ "Expected comment at line " ++ show l ++ ", column " ++ show c
-        "\"" | isStringLiteral i -> readStringLiteral i c
-        ch | isJust (toDigit ch) -> readNatural i c
-           | isIdentStart ch -> readIdent i c
+        _  | isStringLiteral i -> readStringLiteral i c
+           | isNumericLiteral i -> readNumericLiteral i c
+        ch | isIdentStart ch -> readIdent i c
            | otherwise -> throwException $ error $ "Unexpected character " ++ show ch ++ " at line " ++ show l ++ ", column " ++ show c
       where
       emit :: Token -> Eff _ Unit      
@@ -187,14 +187,19 @@ lex s = runPure (catchException (return <<< Left) (Right <<< removeComments <$> 
       readStringLiteral i c = 
         case match stringLiteralRegex (drop i s) of
           Just (s : _) -> emitThen (StringLiteral (parseString s)) (i + length s) (c + length s)
-    
-      readNatural :: Number -> Number -> Eff _ Unit      
-      readNatural i col = collect i col 0
+          
+      numericLiteralRegex :: Regex
+      numericLiteralRegex = regex "^-?[0-9]+" flags
         where
-        collect j col acc = 
-          case strAt j >>= toDigit of
-            Just d -> collect (j + 1) (col + 1) (acc * 10 + d)
-            Nothing -> emitThen (Natural acc) j col
+        flags = { unicode: false, sticky: false, multiline: false, ignoreCase: false, global: false }      
+          
+      isNumericLiteral :: Number -> Boolean
+      isNumericLiteral i = test numericLiteralRegex (drop i s) 
+    
+      readNumericLiteral :: Number -> Number -> Eff _ Unit
+      readNumericLiteral i c = 
+        case match numericLiteralRegex (drop i s) of
+          Just (s : _) -> emitThen (Natural (parseString s)) (i + length s) (c + length s)
             
       readIdent :: Number -> Number -> Eff _ Unit         
       readIdent i col = collect i col ""
