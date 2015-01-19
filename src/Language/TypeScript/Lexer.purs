@@ -13,6 +13,7 @@ import Data.Foldable (elem, foldl)
 import Control.Monad.Eff
 import Control.Monad.Eff.Exception
 import Control.Monad.ST    
+import Control.Monad.Rec.Class    
     
 data Token
   = LParen
@@ -97,6 +98,8 @@ foreign import parseString
   \  return JSON.parse(s);\
   \}" :: forall a. String -> a
   
+type LexerState = { index :: Number, line :: Number, column :: Number }  
+  
 lex :: String -> Either Error [PosToken]
 lex s = runPure (catchException (return <<< Left) (Right <<< removeComments <$> runSTArray (do
   ts <- emptySTArray
@@ -104,52 +107,54 @@ lex s = runPure (catchException (return <<< Left) (Right <<< removeComments <$> 
   return ts)))
   where
   build :: forall h eff. STArray h PosToken -> Eff (st :: ST h, err :: Exception | eff) Unit
-  build ts = go 0 1 1
+  build ts = tailRecM go { index: 0, line: 1, column: 1 }
     where
-    go i l c | i >= length s = return unit
-             | isNewLine (charAt i s) = go (i + 1) (l + 1) 1
-             | isWhitespace (charAt i s) = go (i + 1) l (c + 1)
-             | otherwise = 
-      case charString (fromJust (charAt i s)) of
-        "(" -> emit LParen  
-        ")" -> emit RParen  
-        "{" -> emit LBrace  
-        "}" -> emit RBrace  
-        "<" -> emit LAngle  
-        ">" -> emit RAngle  
-        "[" -> emit LSquare 
-        "]" -> emit RSquare 
-        ":" -> emit Colon   
-        "," -> emit Comma   
-        ";" -> emit Semi    
-        "?" -> emit QuestionMark
-        "." -> case take 2 $ drop (i + 1) s of
-                 ".." -> emitThen Ellipsis (i + 3) (c + 3)
-                 _    -> emit Dot
-        "=" -> case charString <$> charAt (i + 1) s of
-                 Just ">" -> emitThen Arrow (i + 2) (c + 2)
-                 _        -> emit Equals
-        "/" -> case charString <$> charAt (i + 1) s of
-                 Just "/" -> readLineComment (i + 2)
-                 Just "*" -> readBlockComment (i + 2) l c
-                 _        -> throwException $ error $ "Expected comment at line " ++ show l ++ ", column " ++ show c
-        _  | isStringLiteral i -> readStringLiteral i c
-           | isNumericLiteral i -> readNumericLiteral i c
-        ch | isIdentStart ch -> readIdent i c
-           | otherwise -> throwException $ error $ "Unexpected character " ++ show ch ++ " at line " ++ show l ++ ", column " ++ show c
+    go :: forall eff. LexerState -> Eff (st :: ST _, err :: Exception | eff) (Either LexerState Unit)
+    go { index: i, line: l, column: c } 
+      | i >= length s = return $ Right unit
+      | isNewLine    (charAt i s) = return $ Left { index: i + 1, line: l + 1, column: 1     }
+      | isWhitespace (charAt i s) = return $ Left { index: i + 1, line: l    , column: c + 1 }
+      | otherwise = 
+        case charString (fromJust (charAt i s)) of
+          "(" -> emit LParen  
+          ")" -> emit RParen  
+          "{" -> emit LBrace  
+          "}" -> emit RBrace  
+          "<" -> emit LAngle  
+          ">" -> emit RAngle  
+          "[" -> emit LSquare 
+          "]" -> emit RSquare 
+          ":" -> emit Colon   
+          "," -> emit Comma   
+          ";" -> emit Semi    
+          "?" -> emit QuestionMark
+          "." -> case take 2 $ drop (i + 1) s of
+                   ".." -> emitThen Ellipsis (i + 3) (c + 3)
+                   _    -> emit Dot
+          "=" -> case charString <$> charAt (i + 1) s of
+                   Just ">" -> emitThen Arrow (i + 2) (c + 2)
+                   _        -> emit Equals
+          "/" -> case charString <$> charAt (i + 1) s of
+                   Just "/" -> readLineComment (i + 2)
+                   Just "*" -> readBlockComment (i + 2) l c
+                   _        -> throwException $ error $ "Expected comment at line " ++ show l ++ ", column " ++ show c
+          _  | isStringLiteral i -> readStringLiteral i c
+             | isNumericLiteral i -> readNumericLiteral i c
+          ch | isIdentStart ch -> readIdent i c
+             | otherwise -> throwException $ error $ "Unexpected character " ++ show ch ++ " at line " ++ show l ++ ", column " ++ show c
       where
-      emit :: Token -> Eff _ Unit      
+      emit :: Token -> Eff _ (Either LexerState Unit)      
       emit tok = emitThen tok (i + 1) (c + 1)
     
-      emitThen :: Token -> Number -> Number -> Eff _ Unit
+      emitThen :: Token -> Number -> Number -> Eff _ (Either LexerState Unit)
       emitThen tok next col = emitThen' tok next l col
     
-      emitThen' :: Token -> Number -> Number -> Number -> Eff _ Unit
+      emitThen' :: Token -> Number -> Number -> Number -> Eff _ (Either LexerState Unit)
       emitThen' tok next line col = do
         ts `pushSTArray` { token: tok, line: line, column: col, comments: [] }
-        go next l col
+        return $ Left { index: next, line: l, column: col }
           
-      readLineComment :: Number -> Eff _ Unit
+      readLineComment :: Number -> Eff _ (Either LexerState Unit)
       readLineComment i = collect 0
         where 
         collect len = 
@@ -161,7 +166,7 @@ lex s = runPure (catchException (return <<< Left) (Right <<< removeComments <$> 
       
         lineComment i len = emitThen' (LineComment (take len (drop i s))) (i + len + 1) 1 (l + 1)
           
-      readBlockComment :: Number -> Number -> Number -> Eff _ Unit      
+      readBlockComment :: Number -> Number -> Number -> Eff _ (Either LexerState Unit)      
       readBlockComment i l c = collect 0 l c
         where 
         collect len l c = 
@@ -183,7 +188,7 @@ lex s = runPure (catchException (return <<< Left) (Right <<< removeComments <$> 
       isStringLiteral :: Number -> Boolean
       isStringLiteral i = test stringLiteralRegex (drop i s) 
     
-      readStringLiteral :: Number -> Number -> Eff _ Unit
+      readStringLiteral :: Number -> Number -> Eff _ (Either LexerState Unit)
       readStringLiteral i c = 
         case match stringLiteralRegex (drop i s) of
           Just (s : _) -> emitThen (StringLiteral (parseString s)) (i + length s) (c + length s)
@@ -196,12 +201,12 @@ lex s = runPure (catchException (return <<< Left) (Right <<< removeComments <$> 
       isNumericLiteral :: Number -> Boolean
       isNumericLiteral i = test numericLiteralRegex (drop i s) 
     
-      readNumericLiteral :: Number -> Number -> Eff _ Unit
+      readNumericLiteral :: Number -> Number -> Eff _ (Either LexerState Unit)
       readNumericLiteral i c = 
         case match numericLiteralRegex (drop i s) of
           Just (s : _) -> emitThen (Natural (parseString s)) (i + length s) (c + length s)
             
-      readIdent :: Number -> Number -> Eff _ Unit         
+      readIdent :: Number -> Number -> Eff _ (Either LexerState Unit)         
       readIdent i col = collect i col ""
         where
         collect j col acc = 

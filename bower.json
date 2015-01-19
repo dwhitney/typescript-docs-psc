@@ -23,6 +23,7 @@
     "purescript-maps": "~0.2.0",
     "purescript-parsing": "~0.2.0",
     "purescript-yargs": "~0.4.0",
-    "purescript-node-fs": "~0.2.1"
+    "purescript-node-fs": "~0.2.1",
+    "purescript-tailrec": "~0.1.0"
   }
 }
