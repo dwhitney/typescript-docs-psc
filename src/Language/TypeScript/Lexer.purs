@@ -147,12 +147,12 @@ lex s = runPure (catchException (return <<< Left) (Right <<< removeComments <$> 
       emit tok = emitThen tok (i + 1) (c + 1)
     
       emitThen :: Token -> Number -> Number -> Eff _ (Either LexerState Unit)
-      emitThen tok next col = emitThen' tok next l col
+      emitThen tok next col = emitThen' tok next (l + 1) col
     
       emitThen' :: Token -> Number -> Number -> Number -> Eff _ (Either LexerState Unit)
       emitThen' tok next line col = do
-        ts `pushSTArray` { token: tok, line: line, column: col, comments: [] }
-        return $ Left { index: next, line: l, column: col }
+        ts `pushSTArray` { token: tok, line: l, column: c, comments: [] }
+        return $ Left { index: next, line: line, column: col }
           
       readLineComment :: Number -> Eff _ (Either LexerState Unit)
       readLineComment i = collect 0
